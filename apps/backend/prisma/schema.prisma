@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TaskStatus {
+  OPEN
+  TO_DO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+}
+
+model User {
+  id             String   @id @default(cuid())
+  githubId       BigInt   @unique
+  githubLogin    String   @unique
+  email          String?
+  avatarUrl      String?
+  accessTokenEnc String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  repos          Repo[]
+  tasks          Task[]
+
+  @@map("users")
+}
+
+model Repo {
+  id            String     @id @default(cuid())
+  userId        String
+  githubRepoId  BigInt     @unique
+  owner         String
+  name          String
+  fullName      String
+  private       Boolean
+  defaultBranch String
+  connectedAt   DateTime   @default(now())
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks         Task[]
+  syncState     SyncState?
+
+  @@map("repos")
+  @@index([userId])
+}
+
+model Task {
+  id                   String     @id @default(cuid())
+  userId               String
+  repoId               String
+  title                String
+  description          String?
+  branch               String?
+  linkedIssueNumber    Int?
+  assignee             String?
+  status               TaskStatus @default(OPEN)
+  needsHelp            Boolean    @default(false)
+  lastManualOverrideAt DateTime?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  user                 User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repo                 Repo       @relation(fields: [repoId], references: [id], onDelete: Cascade)
+
+  @@index([repoId, status])
+  @@index([assignee])
+  @@map("tasks")
+}
+
+model SyncState {
+  id                  String    @id @default(cuid())
+  repoId              String    @unique
+  lastCommitShaSeen   String?
+  lastPrUpdatedAtSeen DateTime?
+  lastPolledAt        DateTime?
+  lastPollStatus      String?
+  lastPollError       String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  repo                Repo      @relation(fields: [repoId], references: [id], onDelete: Cascade)
+
+  @@map("sync_state")
+}
