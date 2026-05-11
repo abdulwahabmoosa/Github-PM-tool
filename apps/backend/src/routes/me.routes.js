@@ -1,7 +1,6 @@
 import { Router } from 'express';
-import { Octokit } from 'octokit';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { decrypt } from '../lib/crypto.js';
+import { octokitForUser } from '../lib/octokitFor.js';
 
 const router = Router();
 
@@ -12,8 +11,7 @@ router.get('/me', requireAuth, (req, res) => {
 
 router.get('/me/github-repos', requireAuth, async (req, res) => {
   try {
-    const token = decrypt(req.user.accessTokenEnc);
-    const octokit = new Octokit({ auth: token });
+    const octokit = await octokitForUser(req.user.id);
 
     const { data } = await octokit.rest.repos.listForAuthenticatedUser({
       per_page: 100,

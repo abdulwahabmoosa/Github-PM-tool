@@ -7,8 +7,32 @@ export default function ConnectedRepos({ repos, onDisconnect, loading }) {
     empty: { color: '#666', fontStyle: 'italic' },
   };
 
+  function roleBadge(role) {
+    return (
+      <span style={{
+        fontSize: '10px',
+        padding: '2px 6px',
+        borderRadius: 4,
+        background: role === 'owner' ? '#185FA5' : '#e0e0e0',
+        color: role === 'owner' ? '#fff' : '#333',
+        textTransform: 'uppercase',
+        letterSpacing: '0.04em',
+        flexShrink: 0,
+      }}>
+        {role}
+      </span>
+    );
+  }
+
+  function disconnectMessage(repo) {
+    if (repo.role === 'member') {
+      return `Remove your access to ${repo.fullName}? Other team members keep access.`;
+    }
+    return `Disconnect ${repo.fullName}?\n\nIf you're the only member, the repo and all tasks will be deleted.\nIf other members exist, ownership transfers to the oldest member.`;
+  }
+
   function handleDisconnect(repo) {
-    if (window.confirm(`Disconnect ${repo.fullName}? Tasks linked to this repo will be deleted.`)) {
+    if (window.confirm(disconnectMessage(repo))) {
       onDisconnect(repo.id);
     }
   }
@@ -23,6 +47,7 @@ export default function ConnectedRepos({ repos, onDisconnect, loading }) {
       {repos.map((repo) => (
         <div key={repo.id} style={s.row}>
           <span>{repo.fullName}</span>
+          {roleBadge(repo.role)}
           <span style={s.tag}>{repo.private ? 'private' : 'public'}</span>
           <span style={s.meta}>default: {repo.defaultBranch}</span>
           <button style={s.btn} onClick={() => handleDisconnect(repo)}>Disconnect</button>

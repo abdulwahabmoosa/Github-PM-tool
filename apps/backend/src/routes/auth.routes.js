@@ -57,18 +57,40 @@ router.get('/github/callback', async (req, res) => {
 
   const ghUser = await userRes.json();
 
+  // GitHub returns email: null for users with private emails. Fetch
+  // /user/emails to get the primary email regardless of visibility.
+  let resolvedEmail = ghUser.email ?? null;
+  if (!resolvedEmail) {
+    try {
+      const emailsRes = await fetch('https://api.github.com/user/emails', {
+        headers: {
+          Authorization: `Bearer ${tokenData.access_token}`,
+          Accept: 'application/vnd.github+json',
+          'User-Agent': 'TaskMaster/0.1',
+        },
+      });
+      if (emailsRes.ok) {
+        const emails = await emailsRes.json();
+        const primary = emails.find((e) => e.primary && e.verified);
+        if (primary) resolvedEmail = primary.email;
+      }
+    } catch (err) {
+      console.warn('[auth] failed to fetch /user/emails:', err.message);
+    }
+  }
+
   const user = await prisma.user.upsert({
     where: { githubId: BigInt(ghUser.id) },
     update: {
       githubLogin: ghUser.login,
-      email: ghUser.email ?? null,
+      email: resolvedEmail,
       avatarUrl: ghUser.avatar_url ?? null,
       accessTokenEnc: encrypt(tokenData.access_token),
     },
     create: {
       githubId: BigInt(ghUser.id),
       githubLogin: ghUser.login,
-      email: ghUser.email ?? null,
+      email: resolvedEmail,
       avatarUrl: ghUser.avatar_url ?? null,
       accessTokenEnc: encrypt(tokenData.access_token),
     },

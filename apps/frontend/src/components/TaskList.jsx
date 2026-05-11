@@ -4,6 +4,7 @@ const SECTIONS = [
   { status: 'OPEN',        label: 'Open' },
   { status: 'TO_DO',       label: 'To do' },
   { status: 'IN_PROGRESS', label: 'In progress' },
+  { status: 'HELP_NEEDED', label: 'Help needed' },
   { status: 'IN_REVIEW',   label: 'In review' },
   { status: 'DONE',        label: 'Done' },
 ];

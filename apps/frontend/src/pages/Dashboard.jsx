@@ -8,6 +8,15 @@ import TaskFormModal from '../components/TaskFormModal.jsx';
 import TaskDetailModal from '../components/TaskDetailModal.jsx';
 import ManageRepos from './ManageRepos.jsx';
 
+function relTime(iso) {
+  if (!iso) return 'never polled';
+  const ms = Date.now() - new Date(iso).getTime();
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  return `${Math.floor(s / 3600)}h ago`;
+}
+
 export default function Dashboard({ user, onLogout }) {
   const { repos: connectedRepos, loading: reposLoading, refresh: refreshRepos } = useConnectedRepos();
   const [selectedRepoId, setSelectedRepoId] = useState(null);
@@ -20,6 +29,15 @@ export default function Dashboard({ user, onLogout }) {
   const [githubRepos, setGithubRepos] = useState([]);
   const [githubLoading, setGithubLoading] = useState(false);
   const [githubError, setGithubError] = useState(null);
+
+  const [polling, setPolling] = useState(false);
+  const [pollMessage, setPollMessage] = useState(null);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    const t = setInterval(() => setTick((n) => n + 1), 5000);
+    return () => clearInterval(t);
+  }, []);
 
   const fetchGithub = useCallback(() => {
     setGithubLoading(true);
@@ -44,6 +62,22 @@ export default function Dashboard({ user, onLogout }) {
       setSelectedRepoId(connectedRepos[0]?.id ?? null);
     }
   }, [connectedRepos]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handlePollNow() {
+    if (!selectedRepoId) return;
+    setPolling(true);
+    setPollMessage(null);
+    try {
+      const result = await api.post(`/api/repos/${selectedRepoId}/poll-now`);
+      setPollMessage(`Polled. ${result.newEvents ?? 0} new event(s).`);
+      refreshRepos();
+      tasks.refresh();
+    } catch (err) {
+      setPollMessage(`Poll failed: ${err.message}`);
+    } finally {
+      setPolling(false);
+    }
+  }
 
   async function handleConnect(payload) {
     try {
@@ -89,7 +123,6 @@ export default function Dashboard({ user, onLogout }) {
   async function handleStatusChange(id, status) {
     try {
       const updated = await tasks.updateStatus(id, status);
-      // Keep detail modal open but reflect new status
       setTaskDetailModal((prev) => prev.open && prev.task?.id === id
         ? { ...prev, task: updated }
         : prev
@@ -116,7 +149,7 @@ export default function Dashboard({ user, onLogout }) {
     header: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 },
     avatar: { width: 40, height: 40, borderRadius: '50%' },
     logoutBtn: { marginLeft: 'auto', padding: '6px 14px', cursor: 'pointer', fontSize: '13px' },
-    repoBar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '20px 0 12px' },
+    repoBar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '20px 0 4px' },
     newTaskBtn: { padding: '7px 14px', cursor: 'pointer', fontSize: '13px' },
     emptyLink: { cursor: 'pointer', background: 'none', border: 'none', color: '#185FA5', padding: 0, fontSize: 'inherit', textDecoration: 'underline' },
   };
@@ -171,6 +204,20 @@ export default function Dashboard({ user, onLogout }) {
             >
               + New task
             </button>
+          </div>
+          <div style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <span>Last polled: {relTime(selectedRepo?.syncState?.lastPolledAt, tick)}</span>
+            {selectedRepo?.syncState?.lastPollStatus && selectedRepo.syncState.lastPollStatus !== 'OK' && (
+              <span style={{ color: '#A32D2D' }}>· {selectedRepo.syncState.lastPollStatus}</span>
+            )}
+            <button
+              onClick={handlePollNow}
+              disabled={polling}
+              style={{ fontSize: 11, padding: '2px 8px', cursor: polling ? 'wait' : 'pointer' }}
+            >
+              {polling ? 'Polling…' : 'Poll now'}
+            </button>
+            {pollMessage && <span style={{ color: '#444' }}>{pollMessage}</span>}
           </div>
           <TaskList tasks={tasks.tasks} loading={tasks.loading} onTaskClick={(task) => setTaskDetailModal({ open: true, task })} />
         </>

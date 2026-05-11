@@ -1,8 +1,7 @@
 import { Router } from 'express';
-import { Octokit } from 'octokit';
-import prisma from '../db/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { decrypt } from '../lib/crypto.js';
+import { octokitForUser } from '../lib/octokitFor.js';
+import { getAccessibleRepo } from '../lib/access.js';
 
 const router = Router();
 
@@ -20,14 +19,8 @@ function setCached(key, data) {
   cache.set(key, { data, expiresAt: Date.now() + TTL_MS });
 }
 
-async function getOwnedRepo(repoId, userId) {
-  const repo = await prisma.repo.findUnique({ where: { id: repoId } });
-  if (!repo || repo.userId !== userId) return null;
-  return repo;
-}
-
 router.get('/repos/:repoId/collaborators', requireAuth, async (req, res) => {
-  const repo = await getOwnedRepo(req.params.repoId, req.user.id);
+  const repo = await getAccessibleRepo(req.params.repoId, req.user.id);
   if (!repo) return res.status(404).json({ error: 'not_found' });
 
   const cacheKey = `collab:${repo.id}`;
@@ -35,8 +28,7 @@ router.get('/repos/:repoId/collaborators', requireAuth, async (req, res) => {
   if (cached) return res.json({ collaborators: cached, fetched: 'cached' });
 
   try {
-    const token = decrypt(req.user.accessTokenEnc);
-    const octokit = new Octokit({ auth: token });
+    const octokit = await octokitForUser(req.user.id);
     const { data } = await octokit.rest.repos.listCollaborators({
       owner: repo.owner,
       repo: repo.name,
@@ -70,7 +62,7 @@ router.get('/repos/:repoId/collaborators', requireAuth, async (req, res) => {
 });
 
 router.get('/repos/:repoId/issues', requireAuth, async (req, res) => {
-  const repo = await getOwnedRepo(req.params.repoId, req.user.id);
+  const repo = await getAccessibleRepo(req.params.repoId, req.user.id);
   if (!repo) return res.status(404).json({ error: 'not_found' });
 
   const cacheKey = `issues:${repo.id}`;
@@ -78,8 +70,7 @@ router.get('/repos/:repoId/issues', requireAuth, async (req, res) => {
   if (cached) return res.json({ issues: cached, fetched: 'cached' });
 
   try {
-    const token = decrypt(req.user.accessTokenEnc);
-    const octokit = new Octokit({ auth: token });
+    const octokit = await octokitForUser(req.user.id);
     const { data } = await octokit.rest.issues.listForRepo({
       owner: repo.owner,
       repo: repo.name,

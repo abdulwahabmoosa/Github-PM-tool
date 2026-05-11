@@ -6,13 +6,15 @@ const STATUS_COLORS = {
   OPEN:        '#888780',
   TO_DO:       '#534AB7',
   IN_PROGRESS: '#BA7517',
+  HELP_NEEDED: '#C0392B',
   IN_REVIEW:   '#185FA5',
   DONE:        '#639922',
 };
 const STATUS_LABELS = {
-  OPEN: 'Open', TO_DO: 'To do', IN_PROGRESS: 'In progress', IN_REVIEW: 'In review', DONE: 'Done',
+  OPEN: 'Open', TO_DO: 'To do', IN_PROGRESS: 'In progress',
+  HELP_NEEDED: 'Help needed', IN_REVIEW: 'In review', DONE: 'Done',
 };
-const ALL_STATUSES = ['OPEN', 'TO_DO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE'];
+const ALL_STATUSES = ['OPEN', 'TO_DO', 'IN_PROGRESS', 'HELP_NEEDED', 'IN_REVIEW', 'DONE'];
 
 const OVERLAY = {
   position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
@@ -180,10 +182,44 @@ export default function TaskDetailModal({ task, isOpen, onClose, onSave, onDelet
             title="Click to edit"
             style={{ fontSize: '1.2rem', fontWeight: 600, margin: '8px 0 16px', cursor: 'text', borderBottom: '1px solid transparent' }}
           >
+            {task.repoTaskNumber != null && (
+              <span style={{ fontSize: '1rem', color: '#999', fontWeight: 400, marginRight: 8 }}>
+                #{task.repoTaskNumber}
+              </span>
+            )}
             {title}
           </h2>
         )}
         {titleError && <p style={{ color: 'red', fontSize: '12px', marginTop: -12, marginBottom: 12 }}>{titleError}</p>}
+
+        {/* Tag commands */}
+        <div style={{ border: '1px solid #e0e0e0', borderRadius: 6, background: '#fafafa', padding: 12, marginBottom: 16 }}>
+          <p style={{ fontSize: '12px', fontWeight: 600, margin: '0 0 8px', color: '#555', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Tag commands</p>
+          {task.availableCommands?.length > 0 ? (
+            task.availableCommands.map((cmd) => (
+              <div key={cmd.verb} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <span style={{ fontSize: '12px', color: '#666', minWidth: 140, flexShrink: 0 }}>{cmd.label}</span>
+                <code style={{
+                  fontSize: 11, padding: '3px 8px', background: '#f0f0f0',
+                  borderRadius: 4, fontFamily: 'ui-monospace, monospace',
+                  flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {cmd.command}
+                </code>
+                <button
+                  style={{ fontSize: 11, padding: '3px 8px', cursor: 'pointer', flexShrink: 0 }}
+                  onClick={() => { navigator.clipboard.writeText(cmd.command); }}
+                >
+                  Copy
+                </button>
+              </div>
+            ))
+          ) : (
+            <p style={{ fontSize: '12px', color: '#999', margin: 0, fontStyle: 'italic' }}>
+              No actions available for this status
+            </p>
+          )}
+        </div>
 
         <div style={fieldStyle}>
           <label style={labelStyle}>Description</label>

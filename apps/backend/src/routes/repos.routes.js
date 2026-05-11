@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import prisma from '../db/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
+import { pollRepo } from '../lib/githubPoller.js';
+import { getAccessibleRepo } from '../lib/access.js';
 
 const router = Router();
 
@@ -14,7 +16,7 @@ const connectSchema = z.object({
   defaultBranch: z.string(),
 });
 
-function formatRepo(repo) {
+function formatRepo(repo, role) {
   return {
     id: repo.id,
     githubRepoId: String(repo.githubRepoId),
@@ -24,15 +26,24 @@ function formatRepo(repo) {
     private: repo.private,
     defaultBranch: repo.defaultBranch,
     connectedAt: repo.connectedAt,
+    role,
+    syncState: repo.syncState
+      ? {
+          lastPolledAt: repo.syncState.lastPolledAt,
+          lastPollStatus: repo.syncState.lastPollStatus,
+          lastPollError: repo.syncState.lastPollError,
+        }
+      : null,
   };
 }
 
 router.get('/repos', requireAuth, async (req, res) => {
-  const repos = await prisma.repo.findMany({
+  const accesses = await prisma.repoAccess.findMany({
     where: { userId: req.user.id },
-    orderBy: { connectedAt: 'desc' },
+    include: { repo: { include: { syncState: true } } },
+    orderBy: { grantedAt: 'desc' },
   });
-  res.json(repos.map(formatRepo));
+  res.json(accesses.map((a) => formatRepo(a.repo, a.role)));
 });
 
 router.post('/repos/connect', requireAuth, async (req, res) => {
@@ -42,39 +53,103 @@ router.post('/repos/connect', requireAuth, async (req, res) => {
   }
   const { githubRepoId, owner, name, fullName, private: isPrivate, defaultBranch } = result.data;
 
-  const existing = await prisma.repo.findUnique({ where: { githubRepoId } });
-  if (existing) {
-    if (existing.userId === req.user.id) {
-      await prisma.syncState.upsert({
-        where: { repoId: existing.id },
-        update: {},
-        create: { repoId: existing.id },
-      });
-      return res.status(200).json(formatRepo(existing));
+  const existingRepo = await prisma.repo.findUnique({
+    where: { githubRepoId },
+    include: { syncState: true },
+  });
+
+  if (existingRepo) {
+    const existingAccess = await prisma.repoAccess.findUnique({
+      where: { userId_repoId: { userId: req.user.id, repoId: existingRepo.id } },
+    });
+
+    if (existingAccess) {
+      return res.status(200).json(formatRepo(existingRepo, existingAccess.role));
     }
-    return res.status(409).json({ error: 'repo_already_connected' });
+
+    // New member joining an existing repo
+    await prisma.repoAccess.create({
+      data: { userId: req.user.id, repoId: existingRepo.id, role: 'member' },
+    });
+    return res.status(201).json(formatRepo(existingRepo, 'member'));
   }
 
-  const repo = await prisma.repo.create({
-    data: { userId: req.user.id, githubRepoId, owner, name, fullName, private: isPrivate, defaultBranch },
+  // First-ever connection of this repo to TaskMaster
+  const { repo, access } = await prisma.$transaction(async (tx) => {
+    const repo = await tx.repo.create({
+      data: {
+        connectedByUserId: req.user.id,
+        githubRepoId,
+        owner,
+        name,
+        fullName,
+        private: isPrivate,
+        defaultBranch,
+      },
+    });
+    await tx.syncState.create({ data: { repoId: repo.id } });
+    const access = await tx.repoAccess.create({
+      data: { userId: req.user.id, repoId: repo.id, role: 'owner' },
+    });
+    return { repo, access };
   });
 
-  await prisma.syncState.upsert({
-    where: { repoId: repo.id },
-    update: {},
-    create: { repoId: repo.id },
-  });
-
-  res.status(201).json(formatRepo(repo));
+  res.status(201).json(formatRepo(repo, access.role));
 });
 
 router.delete('/repos/:id', requireAuth, async (req, res) => {
-  const repo = await prisma.repo.findUnique({ where: { id: req.params.id } });
-  if (!repo || repo.userId !== req.user.id) {
-    return res.status(404).json({ error: 'not_found' });
+  const accessRow = await prisma.repoAccess.findUnique({
+    where: { userId_repoId: { userId: req.user.id, repoId: req.params.id } },
+  });
+  if (!accessRow) return res.status(404).json({ error: 'not_found' });
+
+  if (accessRow.role === 'member') {
+    await prisma.repoAccess.delete({ where: { id: accessRow.id } });
+    return res.status(204).send();
   }
-  await prisma.repo.delete({ where: { id: req.params.id } });
-  res.status(204).send();
+
+  // Owner disconnect: check for other members
+  const otherMembers = await prisma.repoAccess.findMany({
+    where: { repoId: req.params.id, NOT: { userId: req.user.id } },
+    orderBy: { grantedAt: 'asc' },
+  });
+
+  if (otherMembers.length === 0) {
+    // Solo owner — delete entire repo (cascade handles everything)
+    await prisma.repo.delete({ where: { id: req.params.id } });
+    return res.status(204).send();
+  }
+
+  // Transfer ownership to oldest member
+  const newOwner = otherMembers[0];
+  await prisma.$transaction([
+    prisma.repoAccess.update({ where: { id: newOwner.id }, data: { role: 'owner' } }),
+    prisma.repo.update({ where: { id: req.params.id }, data: { connectedByUserId: newOwner.userId } }),
+    prisma.repoAccess.delete({ where: { id: accessRow.id } }),
+  ]);
+  return res.status(204).send();
+});
+
+router.post('/repos/:repoId/poll-now', requireAuth, async (req, res) => {
+  const repo = await getAccessibleRepo(req.params.repoId, req.user.id);
+  if (!repo) return res.status(404).json({ error: 'not_found' });
+  try {
+    const result = await pollRepo(repo.id);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: 'poll_failed', details: err.message });
+  }
+});
+
+router.get('/repos/:repoId/events', requireAuth, async (req, res) => {
+  const repo = await getAccessibleRepo(req.params.repoId, req.user.id);
+  if (!repo) return res.status(404).json({ error: 'not_found' });
+  const events = await prisma.githubEvent.findMany({
+    where: { repoId: repo.id },
+    orderBy: { createdAt: 'desc' },
+    take: 50,
+  });
+  res.json(events);
 });
 
 export default router;

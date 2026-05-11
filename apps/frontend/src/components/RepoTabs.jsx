@@ -11,7 +11,7 @@ export default function RepoTabs({ repos, selectedRepoId, onSelect, onManage }) 
       fontSize: '13px',
       fontWeight: selected ? 600 : 400,
       color: selected ? '#185FA5' : '#333',
-      maxWidth: 180,
+      maxWidth: 220,
       overflow: 'hidden',
       textOverflow: 'ellipsis',
       whiteSpace: 'nowrap',
@@ -37,7 +37,20 @@ export default function RepoTabs({ repos, selectedRepoId, onSelect, onManage }) 
           onClick={() => onSelect(repo.id)}
           title={repo.fullName}
         >
-          {repo.fullName}
+          {repo.name}
+          {repo.role === 'owner' && (
+            <span style={{
+              fontSize: '9px',
+              padding: '1px 4px',
+              borderRadius: 3,
+              background: '#185FA5',
+              color: '#fff',
+              marginLeft: 6,
+              verticalAlign: 'middle',
+            }}>
+              OWNER
+            </span>
+          )}
         </button>
       ))}
       <button style={s.manageBtn} onClick={onManage}>+ Manage repos</button>

@@ -6,6 +6,8 @@ import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import prisma from './db/prisma.js';
+import { startPoller } from './services/pollerWorker.js';
+import { startRuleEngine } from './services/ruleEngineWorker.js';
 import authRoutes from './routes/auth.routes.js';
 import meRoutes from './routes/me.routes.js';
 import reposRoutes from './routes/repos.routes.js';
@@ -60,4 +62,6 @@ app.use('/api', githubDataRoutes);
 
 app.listen(PORT, () => {
   console.log(`TaskMaster API listening on http://localhost:${PORT}`);
+  startPoller();
+  startRuleEngine();
 });

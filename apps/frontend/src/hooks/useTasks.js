@@ -17,6 +17,12 @@ export function useTasks(repoId) {
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  useEffect(() => {
+    if (!repoId) return;
+    const interval = setInterval(() => { refresh(); }, 10 * 1000);
+    return () => clearInterval(interval);
+  }, [repoId, refresh]);
+
   const createTask = useCallback(async (body) => {
     const task = await api.post(`/api/repos/${repoId}/tasks`, body);
     setTasks((prev) => [task, ...prev]);
