@@ -2,21 +2,10 @@ import { useState, useEffect } from 'react';
 import { useIssues } from '../hooks/useIssues.js';
 import { useCollaborators } from '../hooks/useCollaborators.js';
 
-const OVERLAY = {
-  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-};
-const CARD = {
-  background: '#fff', borderRadius: 8, padding: 24,
-  width: '100%', maxWidth: 540, position: 'relative',
-  maxHeight: '90vh', overflowY: 'auto',
-};
-const fieldStyle = { marginBottom: 16 };
-const labelStyle = { display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: 4 };
-const inputStyle = { width: '100%', padding: '6px 8px', fontSize: '14px', boxSizing: 'border-box', borderRadius: 4, border: '1px solid #ccc' };
-const textareaStyle = { ...inputStyle, minHeight: 80, resize: 'vertical' };
-const selectStyle = { ...inputStyle };
-const noteStyle = { fontSize: '12px', color: '#888', marginTop: 4 };
+const INPUT = 'w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:outline-none rounded-md px-3 py-2 text-sm text-slate-900 dark:text-slate-50 placeholder:text-slate-400 dark:placeholder:text-slate-500';
+const INPUT_ERR = 'w-full bg-white dark:bg-slate-900 border border-red-400 dark:border-red-600 focus:ring-2 focus:ring-red-500/30 focus:border-red-500 focus:outline-none rounded-md px-3 py-2 text-sm text-slate-900 dark:text-slate-50 placeholder:text-slate-400 dark:placeholder:text-slate-500';
+const LABEL = 'block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5';
+const NOTE  = 'text-xs text-slate-500 dark:text-slate-400 mt-1';
 
 export default function TaskFormModal({ isOpen, onClose, onSubmit, initialValues = {}, repoId, mode }) {
   const { issues, fallbackReason: issuesFallback } = useIssues(repoId);
@@ -32,7 +21,6 @@ export default function TaskFormModal({ isOpen, onClose, onSubmit, initialValues
   const [otherAssigneeValue, setOtherAssigneeValue] = useState('');
   const [titleError, setTitleError] = useState('');
 
-  // Reset form when modal opens
   useEffect(() => {
     if (!isOpen) return;
     setTitle(initialValues.title ?? '');
@@ -43,27 +31,19 @@ export default function TaskFormModal({ isOpen, onClose, onSubmit, initialValues
     if (initialValues.linkedIssueNumber) {
       setIssueSelection('__manual');
       setManualIssueValue(String(initialValues.linkedIssueNumber));
-    } else {
-      setIssueSelection('');
-      setManualIssueValue('');
-    }
+    } else { setIssueSelection(''); setManualIssueValue(''); }
     if (initialValues.assignee) {
       setAssigneeSelection('__other');
       setOtherAssigneeValue(initialValues.assignee);
-    } else {
-      setAssigneeSelection('');
-      setOtherAssigneeValue('');
-    }
+    } else { setAssigneeSelection(''); setOtherAssigneeValue(''); }
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Upgrade __manual selection to a real dropdown entry once issues load
   useEffect(() => {
     if (!isOpen || !initialValues.linkedIssueNumber) return;
     const found = issues.find((i) => i.number === initialValues.linkedIssueNumber);
     if (found) { setIssueSelection(String(initialValues.linkedIssueNumber)); setManualIssueValue(''); }
   }, [issues]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Upgrade __other selection to a real dropdown entry once collaborators load
   useEffect(() => {
     if (!isOpen || !initialValues.assignee) return;
     const found = collaborators.find((c) => c.login === initialValues.assignee);
@@ -81,31 +61,16 @@ export default function TaskFormModal({ isOpen, onClose, onSubmit, initialValues
 
   function buildPayload() {
     let linkedIssueNumber = null;
-    if (issuesFallback) {
-      linkedIssueNumber = manualIssueValue ? (parseInt(manualIssueValue, 10) || null) : null;
-    } else if (issueSelection === '__manual') {
-      linkedIssueNumber = manualIssueValue ? (parseInt(manualIssueValue, 10) || null) : null;
-    } else if (issueSelection !== '') {
-      linkedIssueNumber = parseInt(issueSelection, 10) || null;
-    }
+    if (issuesFallback) { linkedIssueNumber = manualIssueValue ? (parseInt(manualIssueValue, 10) || null) : null; }
+    else if (issueSelection === '__manual') { linkedIssueNumber = manualIssueValue ? (parseInt(manualIssueValue, 10) || null) : null; }
+    else if (issueSelection !== '') { linkedIssueNumber = parseInt(issueSelection, 10) || null; }
 
     let assignee = null;
-    if (collabFallback) {
-      assignee = otherAssigneeValue.trim() || null;
-    } else if (assigneeSelection === '__other') {
-      assignee = otherAssigneeValue.trim() || null;
-    } else if (assigneeSelection !== '') {
-      assignee = assigneeSelection;
-    }
+    if (collabFallback) { assignee = otherAssigneeValue.trim() || null; }
+    else if (assigneeSelection === '__other') { assignee = otherAssigneeValue.trim() || null; }
+    else if (assigneeSelection !== '') { assignee = assigneeSelection; }
 
-    return {
-      title: title.trim(),
-      description: description.trim() || null,
-      branch: branch.trim() || null,
-      linkedIssueNumber,
-      assignee,
-      needsHelp,
-    };
+    return { title: title.trim(), description: description.trim() || null, branch: branch.trim() || null, linkedIssueNumber, assignee, needsHelp };
   }
 
   function handleSubmit(e) {
@@ -116,100 +81,112 @@ export default function TaskFormModal({ isOpen, onClose, onSubmit, initialValues
   }
 
   return (
-    <div style={OVERLAY} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={CARD}>
-        <button
-          onClick={onClose}
-          style={{ position: 'absolute', top: 12, right: 14, background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#666' }}
-        >×</button>
-
-        <h2 style={{ marginTop: 0, fontSize: '1.1rem' }}>
-          {mode === 'create' ? 'New task' : 'Edit task'}
-        </h2>
+    <div
+      className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-xl font-medium text-slate-900 dark:text-slate-50">
+            {mode === 'create' ? 'New task' : 'Edit task'}
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 text-xl leading-none"
+          >×</button>
+        </div>
 
         <form onSubmit={handleSubmit}>
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Title *</label>
+          <div className="mb-4">
+            <label className={LABEL}>Title *</label>
             <input
-              style={{ ...inputStyle, borderColor: titleError ? 'red' : '#ccc' }}
+              className={titleError ? INPUT_ERR : INPUT}
               value={title}
               onChange={(e) => { setTitle(e.target.value); if (titleError) setTitleError(''); }}
               placeholder="Task title"
               autoFocus
             />
-            {titleError && <p style={{ color: 'red', fontSize: '12px', margin: '4px 0 0' }}>{titleError}</p>}
+            {titleError && <p className="text-xs text-red-600 dark:text-red-400 mt-1">{titleError}</p>}
           </div>
 
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Description</label>
-            <textarea style={textareaStyle} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional description" />
+          <div className="mb-4">
+            <label className={LABEL}>Description</label>
+            <textarea
+              className={`${INPUT} min-h-[80px] resize-y`}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Optional description"
+            />
           </div>
 
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Branch</label>
-            <input style={inputStyle} value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="feature/auth" />
+          <div className="mb-4">
+            <label className={LABEL}>Branch</label>
+            <input className={INPUT} value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="feature/auth" />
           </div>
 
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Linked issue</label>
+          <div className="mb-4">
+            <label className={LABEL}>Linked issue</label>
             {issuesFallback ? (
               <>
-                <input style={inputStyle} type="number" min="1" value={manualIssueValue} onChange={(e) => setManualIssueValue(e.target.value)} placeholder="Issue number" />
-                <p style={noteStyle}>Couldn't load issues from GitHub ({issuesFallback}). Enter the number manually.</p>
+                <input className={INPUT} type="number" min="1" value={manualIssueValue} onChange={(e) => setManualIssueValue(e.target.value)} placeholder="Issue number" />
+                <p className={NOTE}>Couldn't load issues from GitHub ({issuesFallback}). Enter the number manually.</p>
               </>
             ) : (
               <>
-                <select style={selectStyle} value={issueSelection} onChange={(e) => setIssueSelection(e.target.value)}>
+                <select className={INPUT} value={issueSelection} onChange={(e) => setIssueSelection(e.target.value)}>
                   <option value="">— No linked issue —</option>
                   {issues.map((issue) => (
-                    <option key={issue.number} value={String(issue.number)}>
-                      #{issue.number} — {issue.title}
-                    </option>
+                    <option key={issue.number} value={String(issue.number)}>#{issue.number} — {issue.title}</option>
                   ))}
                   <option value="__manual">Type a number manually...</option>
                 </select>
                 {issueSelection === '__manual' && (
-                  <input style={{ ...inputStyle, marginTop: 6 }} type="number" min="1" value={manualIssueValue} onChange={(e) => setManualIssueValue(e.target.value)} placeholder="Issue number" />
+                  <input className={`${INPUT} mt-1.5`} type="number" min="1" value={manualIssueValue} onChange={(e) => setManualIssueValue(e.target.value)} placeholder="Issue number" />
                 )}
               </>
             )}
           </div>
 
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Assignee</label>
+          <div className="mb-4">
+            <label className={LABEL}>Assignee</label>
             {collabFallback ? (
               <>
-                <input style={inputStyle} value={otherAssigneeValue} onChange={(e) => setOtherAssigneeValue(e.target.value)} placeholder="GitHub login" />
-                <p style={noteStyle}>Couldn't load collaborators from GitHub ({collabFallback}). Enter a username manually.</p>
+                <input className={INPUT} value={otherAssigneeValue} onChange={(e) => setOtherAssigneeValue(e.target.value)} placeholder="GitHub login" />
+                <p className={NOTE}>Couldn't load collaborators from GitHub ({collabFallback}). Enter a username manually.</p>
               </>
             ) : (
               <>
-                <select style={selectStyle} value={assigneeSelection} onChange={(e) => setAssigneeSelection(e.target.value)}>
+                <select className={INPUT} value={assigneeSelection} onChange={(e) => setAssigneeSelection(e.target.value)}>
                   <option value="">— Unassigned —</option>
-                  {collaborators.map((c) => (
-                    <option key={c.login} value={c.login}>{c.login}</option>
-                  ))}
+                  {collaborators.map((c) => <option key={c.login} value={c.login}>{c.login}</option>)}
                   <option value="__other">Type someone else...</option>
                 </select>
                 {assigneeSelection === '__other' && (
-                  <input style={{ ...inputStyle, marginTop: 6 }} value={otherAssigneeValue} onChange={(e) => setOtherAssigneeValue(e.target.value)} placeholder="GitHub login" />
+                  <input className={`${INPUT} mt-1.5`} value={otherAssigneeValue} onChange={(e) => setOtherAssigneeValue(e.target.value)} placeholder="GitHub login" />
                 )}
               </>
             )}
           </div>
 
-          <div style={fieldStyle}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '13px' }}>
-              <input type="checkbox" checked={needsHelp} onChange={(e) => setNeedsHelp(e.target.checked)} />
+          <div className="mb-4">
+            <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700 dark:text-slate-300">
+              <input type="checkbox" className="rounded" checked={needsHelp} onChange={(e) => setNeedsHelp(e.target.checked)} />
               Needs help
             </label>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-            <button type="button" onClick={onClose} style={{ padding: '8px 16px', cursor: 'pointer', fontSize: '14px', background: 'none', border: '1px solid #ccc', borderRadius: 4 }}>
+          <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-slate-200 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={onClose}
+              className="bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 px-3 py-1.5 text-sm font-medium rounded-md transition-colors"
+            >
               Cancel
             </button>
-            <button type="submit" style={{ padding: '8px 16px', cursor: 'pointer', fontSize: '14px', borderRadius: 4 }}>
+            <button
+              type="submit"
+              className="bg-slate-900 dark:bg-slate-50 text-white dark:text-slate-900 hover:bg-slate-700 dark:hover:bg-slate-200 px-3.5 py-2 text-sm font-medium rounded-md transition-colors"
+            >
               {mode === 'create' ? 'Create task' : 'Save changes'}
             </button>
           </div>

@@ -1,3 +1,4 @@
+// DEPRECATED: replaced by RepoSelector in apps/frontend/src/components/dashboard/ in day 9. Delete in day 11 cleanup if confirmed unused.
 export default function RepoTabs({ repos, selectedRepoId, onSelect, onManage }) {
   const s = {
     container: { borderBottom: '1px solid #ccc', display: 'flex', flexWrap: 'wrap' },

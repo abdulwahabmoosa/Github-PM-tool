@@ -9,22 +9,26 @@ export default function ManageRepos({
   onBack,
 }) {
   return (
-    <div style={{ fontFamily: 'system-ui', padding: '32px', maxWidth: '800px' }}>
+    <div className="max-w-3xl mx-auto px-5 py-6">
       <button
         onClick={onBack}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', color: '#185FA5', padding: '0 0 20px', display: 'block' }}
+        className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 mb-6 block transition-colors"
       >
         ← Back to dashboard
       </button>
+
       <ConnectedRepos repos={connectedRepos} onDisconnect={onDisconnect} loading={connectedLoading} />
-      <RepoBrowser
-        githubRepos={githubRepos}
-        connectedGithubIds={connectedGithubIds}
-        onConnect={onConnect}
-        loading={githubLoading}
-        error={githubError}
-        onRefresh={onRefreshGithub}
-      />
+
+      <div className="border-t border-slate-200 dark:border-slate-800 pt-6">
+        <RepoBrowser
+          githubRepos={githubRepos}
+          connectedGithubIds={connectedGithubIds}
+          onConnect={onConnect}
+          loading={githubLoading}
+          error={githubError}
+          onRefresh={onRefreshGithub}
+        />
+      </div>
     </div>
   );
 }

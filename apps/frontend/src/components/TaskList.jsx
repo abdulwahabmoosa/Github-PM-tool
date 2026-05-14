@@ -1,3 +1,4 @@
+// DEPRECATED: replaced by TaskSection + YourTasksSection + TeamTasksSection in day 9. Delete in day 11 cleanup if confirmed unused.
 import TaskCard from './TaskCard.jsx';
 
 const SECTIONS = [

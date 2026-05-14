@@ -1,15 +1,32 @@
-const STATUS_COLORS = {
-  OPEN:        '#888780',
-  TO_DO:       '#534AB7',
-  IN_PROGRESS: '#BA7517',
-  HELP_NEEDED: '#C0392B',
-  IN_REVIEW:   '#185FA5',
-  DONE:        '#639922',
+import { cn } from '../lib/cn.js';
+
+function relativeTime(iso) {
+  if (!iso) return null;
+  const ms = Date.now() - new Date(iso).getTime();
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
+const STATUS_BORDERS = {
+  OPEN:        'border-l-slate-400 dark:border-l-slate-600',
+  TO_DO:       'border-l-indigo-500 dark:border-l-indigo-600',
+  IN_PROGRESS: 'border-l-amber-500 dark:border-l-amber-600',
+  HELP_NEEDED: 'border-l-red-500 dark:border-l-red-600',
+  IN_REVIEW:   'border-l-blue-500 dark:border-l-blue-600',
+  DONE:        'border-l-emerald-500 dark:border-l-emerald-600',
 };
 
 export default function TaskCard({ task, onClick }) {
-  const color = STATUS_COLORS[task.status] ?? '#888780';
+  const borderClass = STATUS_BORDERS[task.status] ?? 'border-l-slate-400';
   const isDone = task.status === 'DONE';
+
+  const overrideRemainingMs = task.override?.until
+    ? Math.max(0, new Date(task.override.until).getTime() - Date.now())
+    : 0;
+  const overrideActive = overrideRemainingMs > 0;
 
   const metaParts = [task.assignee ?? 'unassigned'];
   if (task.branch) metaParts.push(`· ${task.branch}`);
@@ -20,45 +37,50 @@ export default function TaskCard({ task, onClick }) {
   return (
     <div
       onClick={onClick}
-      onMouseEnter={(e) => { e.currentTarget.style.background = '#f0f0f0'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = '#f8f8f8'; }}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        borderLeft: `4px solid ${color}`,
-        background: '#f8f8f8',
-        padding: '10px 14px',
-        borderRadius: '0 6px 6px 0',
-        cursor: 'pointer',
-        marginBottom: 6,
-        opacity: isDone ? 0.7 : 1,
-      }}
+      className={cn(
+        'relative bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800',
+        'rounded-md border-l-4 cursor-pointer',
+        'hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:ring-1 hover:ring-slate-300 dark:hover:ring-slate-700 transition-all duration-150 p-3',
+        borderClass,
+        isDone && 'opacity-70',
+      )}
     >
-      <p style={{ fontSize: '14px', fontWeight: 500, margin: 0, color: '#111' }}>
-        <span style={{ fontSize: '12px', color: '#999', marginRight: 6 }}>
+      <p className="text-sm font-medium text-slate-900 dark:text-slate-50">
+        <span className="text-xs text-slate-400 dark:text-slate-500 mr-1.5">
           #{task.repoTaskNumber}
         </span>
         {task.title}
       </p>
-      <p style={{ fontSize: '12px', color: '#666', margin: '4px 0 0' }}>
+      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
         {metaParts.join(' ')}
-        {task.needsHelp && <span style={{ color: '#BA7517' }}> · 🙋 needs help</span>}
+        {task.needsHelp && (
+          <span className="text-amber-700 dark:text-amber-400"> · 🙋 needs help</span>
+        )}
       </p>
+      {overrideActive && (
+        <p className="inline-flex items-center gap-1 mt-1.5 px-1.5 py-0.5 text-[11px] bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 rounded border border-red-200 dark:border-red-900">
+          🔒 Override active · automation resumes in {Math.ceil(overrideRemainingMs / 60000)}m
+        </p>
+      )}
+      {task.activity?.commitCount > 0 && (
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+          <strong className="font-medium text-slate-700 dark:text-slate-300">
+            {task.activity.commitCount}
+          </strong>{' '}
+          {task.activity.commitCount === 1 ? 'commit' : 'commits'}
+          {task.activity.lastCommitAt && (
+            <> · last {relativeTime(task.activity.lastCommitAt)}</>
+          )}
+        </p>
+      )}
       {primaryCommand && (
-        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <code style={{
-            fontSize: 11, padding: '4px 8px', background: '#f0f0f0',
-            borderRadius: 4, fontFamily: 'ui-monospace, monospace',
-            flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
+        <div className="mt-2 flex items-center gap-2">
+          <code className="flex-1 font-mono text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-1 rounded overflow-hidden text-ellipsis whitespace-nowrap">
             {primaryCommand.command}
           </code>
           <button
-            style={{ fontSize: 11, padding: '4px 8px', cursor: 'pointer', flexShrink: 0 }}
-            onClick={(e) => {
-              e.stopPropagation();
-              navigator.clipboard.writeText(primaryCommand.command);
-            }}
+            className="flex-shrink-0 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 px-2.5 py-1 text-xs rounded-md transition-colors"
+            onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(primaryCommand.command); }}
           >
             Copy
           </button>

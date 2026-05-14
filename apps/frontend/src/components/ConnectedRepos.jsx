@@ -1,24 +1,10 @@
 export default function ConnectedRepos({ repos, onDisconnect, loading }) {
-  const s = {
-    row: { display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid #eee' },
-    tag: { fontSize: '11px', background: '#f0f0f0', padding: '2px 6px', borderRadius: 4 },
-    meta: { fontSize: '12px', color: '#666' },
-    btn: { marginLeft: 'auto', padding: '4px 10px', cursor: 'pointer', fontSize: '12px' },
-    empty: { color: '#666', fontStyle: 'italic' },
-  };
-
   function roleBadge(role) {
+    const cls = role === 'owner'
+      ? 'bg-indigo-600 text-white'
+      : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300';
     return (
-      <span style={{
-        fontSize: '10px',
-        padding: '2px 6px',
-        borderRadius: 4,
-        background: role === 'owner' ? '#185FA5' : '#e0e0e0',
-        color: role === 'owner' ? '#fff' : '#333',
-        textTransform: 'uppercase',
-        letterSpacing: '0.04em',
-        flexShrink: 0,
-      }}>
+      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider flex-shrink-0 ${cls}`}>
         {role}
       </span>
     );
@@ -38,21 +24,43 @@ export default function ConnectedRepos({ repos, onDisconnect, loading }) {
   }
 
   return (
-    <section style={{ marginBottom: 32 }}>
-      <h2 style={{ fontSize: '1.1rem' }}>Connected repositories</h2>
-      {loading && <p>Loading...</p>}
-      {!loading && repos.length === 0 && (
-        <p style={s.empty}>No repositories connected yet. Connect one from the list below.</p>
+    <section className="mb-8">
+      <h2 className="text-base font-semibold text-slate-900 dark:text-slate-50 mb-3">
+        Connected repositories
+      </h2>
+
+      {loading && (
+        <p className="text-sm text-slate-500 dark:text-slate-400 italic">Loading…</p>
       )}
-      {repos.map((repo) => (
-        <div key={repo.id} style={s.row}>
-          <span>{repo.fullName}</span>
-          {roleBadge(repo.role)}
-          <span style={s.tag}>{repo.private ? 'private' : 'public'}</span>
-          <span style={s.meta}>default: {repo.defaultBranch}</span>
-          <button style={s.btn} onClick={() => handleDisconnect(repo)}>Disconnect</button>
-        </div>
-      ))}
+
+      {!loading && repos.length === 0 && (
+        <p className="text-sm text-slate-500 dark:text-slate-400 italic">
+          No repositories connected yet. Connect one from the list below.
+        </p>
+      )}
+
+      <div className="divide-y divide-slate-200 dark:divide-slate-800">
+        {repos.map((repo) => (
+          <div key={repo.id} className="flex items-center gap-3 py-2.5">
+            <span className="text-sm text-slate-900 dark:text-slate-50 font-medium flex-1 min-w-0 truncate">
+              {repo.fullName}
+            </span>
+            {roleBadge(repo.role)}
+            <span className="text-[11px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-1.5 py-0.5 rounded">
+              {repo.private ? 'private' : 'public'}
+            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">
+              {repo.defaultBranch}
+            </span>
+            <button
+              onClick={() => handleDisconnect(repo)}
+              className="flex-shrink-0 text-xs text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 border border-red-200 dark:border-red-900 hover:bg-red-50 dark:hover:bg-red-950/30 px-2.5 py-1 rounded-md transition-colors"
+            >
+              Disconnect
+            </button>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
