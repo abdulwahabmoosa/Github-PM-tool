@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard.jsx';
 import Docs from './pages/Docs.jsx';
 import Insights from './pages/Insights.jsx';
 import RepoSettings from './pages/RepoSettings.jsx';
+import Notifications from './pages/Notifications.jsx';
 
 export default function App() {
   const { user, loading, logout } = useAuth();
@@ -46,6 +47,14 @@ export default function App() {
           element={
             user
               ? <RepoSettings user={user} onLogout={logout} />
+              : <Navigate to="/" replace />
+          }
+        />
+        <Route
+          path="/notifications"
+          element={
+            user
+              ? <Notifications user={user} onLogout={logout} />
               : <Navigate to="/" replace />
           }
         />

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useConnectedRepos } from '../hooks/useConnectedRepos.js';
 import { useInsights } from '../hooks/useInsights.js';
+import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
 import DashboardHeader from '../components/dashboard/DashboardHeader.jsx';
 import RepoSelector from '../components/dashboard/RepoSelector.jsx';
@@ -24,6 +25,7 @@ export default function Insights({ user, onLogout }) {
 
   const { data, loading, error } = useInsights(selectedRepoId);
   const selectedRepo = repos.find((r) => r.id === selectedRepoId);
+  useDocumentTitle('Insights');
 
   return (
     <div className="max-w-5xl mx-auto px-5 py-6">

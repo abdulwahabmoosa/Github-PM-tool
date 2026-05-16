@@ -17,17 +17,18 @@ enum TaskStatus {
 }
 
 model User {
-  id             String       @id @default(cuid())
-  githubId       BigInt       @unique
-  githubLogin    String       @unique
+  id             String         @id @default(cuid())
+  githubId       BigInt         @unique
+  githubLogin    String         @unique
   email          String?
   avatarUrl      String?
   accessTokenEnc String
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
   connectedRepos Repo[]
   tasks          Task[]
   repoAccesses   RepoAccess[]
+  notifications  Notification[]
 
   @@map("users")
 }
@@ -41,12 +42,14 @@ model Repo {
   fullName          String
   private           Boolean
   defaultBranch     String
+  mode              String        @default("OPEN")
   connectedAt       DateTime      @default(now())
   connectedBy       User          @relation(fields: [connectedByUserId], references: [id], onDelete: Cascade)
   tasks             Task[]
   syncState         SyncState?
   events            GithubEvent[]
   accesses          RepoAccess[]
+  ruleConfigs       RuleConfig[]
 
   @@map("repos")
   @@index([connectedByUserId])
@@ -135,11 +138,25 @@ model GithubEvent {
   @@map("github_events")
 }
 
+model RuleConfig {
+  id        String   @id @default(cuid())
+  repoId    String
+  repo      Repo     @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  ruleType  String
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([repoId, ruleType])
+  @@index([repoId])
+  @@map("rule_config")
+}
+
 model RepoAccess {
   id        String   @id @default(cuid())
   userId    String
   repoId    String
-  role      String   @default("member")
+  role      String   @default("MEMBER")
   grantedAt DateTime @default(now())
 
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -149,4 +166,21 @@ model RepoAccess {
   @@index([userId])
   @@index([repoId])
   @@map("repo_access")
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String?
+  linkTo    String?
+  metadata  Json      @default("{}")
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, readAt])
+  @@map("notifications")
 }

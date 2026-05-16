@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { cn } from '../lib/cn.js';
+import ConfirmDialog from './ConfirmDialog.jsx';
 import { useIssues } from '../hooks/useIssues.js';
 import { useCollaborators } from '../hooks/useCollaborators.js';
 import { useHistory } from '../hooks/useHistory.js';
@@ -45,7 +46,12 @@ const NOTE  = 'text-xs text-slate-500 dark:text-slate-400 mt-1';
 const PANEL = 'mb-4 p-3 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800';
 const PANEL_LABEL = 'text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2';
 
-export default function TaskDetailModal({ task, isOpen, onClose, onSave, onDelete, onStatusChange, repoId }) {
+const DEFAULT_PERMISSIONS = {
+  canEditAnyTask: true, canDeleteTask: true, canReassign: true,
+  canChangeStatus: () => true,
+};
+
+export default function TaskDetailModal({ task, isOpen, onClose, onSave, onDelete, onStatusChange, repoId, permissions = DEFAULT_PERMISSIONS }) {
   const { issues, fallbackReason: issuesFallback } = useIssues(repoId);
   const { collaborators, fallbackReason: collabFallback } = useCollaborators(repoId);
   const { history, loading: historyLoading, error: historyError, refresh: refreshHistory } = useHistory(task?.id);
@@ -61,6 +67,7 @@ export default function TaskDetailModal({ task, isOpen, onClose, onSave, onDelet
   const [otherAssigneeValue, setOtherAssigneeValue] = useState('');
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [titleError, setTitleError] = useState('');
+  const [confirmState, setConfirmState] = useState(null);
 
   useEffect(() => {
     if (!isOpen || !task) return;
@@ -103,6 +110,11 @@ export default function TaskDetailModal({ task, isOpen, onClose, onSave, onDelet
 
   if (!isOpen || !task) return null;
 
+  const canEdit   = permissions.canEditAnyTask;
+  const canDelete = permissions.canDeleteTask;
+  const canStatus = permissions.canChangeStatus(task);
+  const canAssign = permissions.canReassign;
+
   function computeLinkedIssueNumber() {
     if (issuesFallback) return manualIssueValue ? (parseInt(manualIssueValue, 10) || null) : null;
     if (issueSelection === '__manual') return manualIssueValue ? (parseInt(manualIssueValue, 10) || null) : null;
@@ -128,7 +140,13 @@ export default function TaskDetailModal({ task, isOpen, onClose, onSave, onDelet
   }
 
   function handleDelete() {
-    if (window.confirm(`Delete task "${task.title}"? This cannot be undone.`)) onDelete(task.id);
+    setConfirmState({
+      title: `Delete task #${task.repoTaskNumber}?`,
+      body: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+      confirmVariant: 'danger',
+      onConfirm: () => onDelete(task.id),
+    });
   }
 
   const overrideRemainingMs = task.override?.until
@@ -137,6 +155,7 @@ export default function TaskDetailModal({ task, isOpen, onClose, onSave, onDelet
   const overrideActive = overrideRemainingMs > 0;
 
   return (
+    <>
     <div
       className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
@@ -149,13 +168,19 @@ export default function TaskDetailModal({ task, isOpen, onClose, onSave, onDelet
 
         {/* Status pill + dropdown */}
         <div className="relative inline-block mb-3">
-          <button
-            onClick={() => setShowStatusDropdown((v) => !v)}
-            className={cn('inline-flex items-center px-3 py-1 rounded-full text-sm font-medium cursor-pointer select-none active:scale-[0.97] transition-transform', STATUS_PILL[task.status] ?? STATUS_PILL.OPEN)}
-          >
-            {STATUS_LABELS[task.status] ?? task.status}
-          </button>
-          {showStatusDropdown && (
+          {canStatus ? (
+            <button
+              onClick={() => setShowStatusDropdown((v) => !v)}
+              className={cn('inline-flex items-center px-3 py-1 rounded-full text-sm font-medium cursor-pointer select-none active:scale-[0.97] transition-transform', STATUS_PILL[task.status] ?? STATUS_PILL.OPEN)}
+            >
+              {STATUS_LABELS[task.status] ?? task.status}
+            </button>
+          ) : (
+            <span className={cn('inline-flex items-center px-3 py-1 rounded-full text-sm font-medium select-none', STATUS_PILL[task.status] ?? STATUS_PILL.OPEN)}>
+              {STATUS_LABELS[task.status] ?? task.status}
+            </span>
+          )}
+          {canStatus && showStatusDropdown && (
             <div className="absolute top-full left-0 mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md shadow-lg z-10 min-w-[140px] py-1">
               {ALL_STATUSES.map((st) => (
                 <button
@@ -171,7 +196,7 @@ export default function TaskDetailModal({ task, isOpen, onClose, onSave, onDelet
         </div>
 
         {/* Title */}
-        {editingTitle ? (
+        {canEdit && editingTitle ? (
           <input
             className={`${INPUT} text-xl font-medium mb-4`}
             value={title}
@@ -181,9 +206,9 @@ export default function TaskDetailModal({ task, isOpen, onClose, onSave, onDelet
           />
         ) : (
           <h2
-            onClick={() => setEditingTitle(true)}
-            title="Click to edit"
-            className="text-xl font-medium text-slate-900 dark:text-slate-50 mb-4 cursor-text hover:text-slate-700 dark:hover:text-slate-200"
+            onClick={() => canEdit && setEditingTitle(true)}
+            title={canEdit ? 'Click to edit' : undefined}
+            className={`text-xl font-medium text-slate-900 dark:text-slate-50 mb-4 ${canEdit ? 'cursor-text hover:text-slate-700 dark:hover:text-slate-200' : ''}`}
           >
             {task.repoTaskNumber != null && (
               <span className="text-sm text-slate-400 dark:text-slate-500 font-normal mr-2">
@@ -266,17 +291,21 @@ export default function TaskDetailModal({ task, isOpen, onClose, onSave, onDelet
         {/* Form fields */}
         <div className="mb-4">
           <label className={LABEL}>Description</label>
-          <textarea className={`${INPUT} min-h-[80px] resize-y`} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional description" />
+          <textarea className={`${INPUT} min-h-[80px] resize-y`} value={description} onChange={(e) => canEdit && setDescription(e.target.value)} readOnly={!canEdit} placeholder="Optional description" />
         </div>
 
         <div className="mb-4">
           <label className={LABEL}>Branch</label>
-          <input className={INPUT} value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="feature/auth" />
+          <input className={INPUT} value={branch} onChange={(e) => canEdit && setBranch(e.target.value)} readOnly={!canEdit} placeholder="feature/auth" />
         </div>
 
         <div className="mb-4">
           <label className={LABEL}>Linked issue</label>
-          {issuesFallback ? (
+          {!canEdit ? (
+            <p className="text-sm text-slate-700 dark:text-slate-300 py-2">
+              {task.linkedIssueNumber ? `#${task.linkedIssueNumber}` : <span className="italic text-slate-400 dark:text-slate-500">None</span>}
+            </p>
+          ) : issuesFallback ? (
             <>
               <input className={INPUT} type="number" min="1" value={manualIssueValue} onChange={(e) => setManualIssueValue(e.target.value)} placeholder="Issue number" />
               <p className={NOTE}>Couldn't load issues from GitHub ({issuesFallback}). Enter the number manually.</p>
@@ -299,7 +328,11 @@ export default function TaskDetailModal({ task, isOpen, onClose, onSave, onDelet
 
         <div className="mb-4">
           <label className={LABEL}>Assignee</label>
-          {collabFallback ? (
+          {!canAssign ? (
+            <p className="text-sm text-slate-700 dark:text-slate-300 py-2">
+              {task.assignee ?? <span className="italic text-slate-400 dark:text-slate-500">Unassigned</span>}
+            </p>
+          ) : collabFallback ? (
             <>
               <input className={INPUT} value={otherAssigneeValue} onChange={(e) => setOtherAssigneeValue(e.target.value)} placeholder="GitHub login" />
               <p className={NOTE}>Couldn't load collaborators from GitHub ({collabFallback}). Enter a username manually.</p>
@@ -318,36 +351,44 @@ export default function TaskDetailModal({ task, isOpen, onClose, onSave, onDelet
           )}
         </div>
 
-        <div className="mb-4">
-          <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700 dark:text-slate-300">
-            <input type="checkbox" className="rounded" checked={needsHelp} onChange={(e) => setNeedsHelp(e.target.checked)} />
-            Needs help
-          </label>
-        </div>
+        {canEdit && (
+          <div className="mb-4">
+            <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700 dark:text-slate-300">
+              <input type="checkbox" className="rounded" checked={needsHelp} onChange={(e) => setNeedsHelp(e.target.checked)} />
+              Needs help
+            </label>
+          </div>
+        )}
 
         <div className="flex justify-between items-center mt-6 pt-4 border-t border-slate-200 dark:border-slate-800">
-          <button
-            onClick={handleDelete}
-            className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 border border-red-300 dark:border-red-800 px-3 py-1.5 text-sm font-medium rounded-md transition-colors"
-          >
-            Delete task
-          </button>
+          {canDelete ? (
+            <button
+              onClick={handleDelete}
+              className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 border border-red-300 dark:border-red-800 px-3 py-1.5 text-sm font-medium rounded-md transition-colors"
+            >
+              Delete task
+            </button>
+          ) : <span />}
           <div className="flex gap-2">
             <button
               onClick={onClose}
               className="bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 px-3 py-1.5 text-sm font-medium rounded-md transition-colors"
             >
-              Cancel
+              {canEdit ? 'Cancel' : 'Close'}
             </button>
-            <button
-              onClick={handleSave}
-              className="bg-slate-900 dark:bg-slate-50 text-white dark:text-slate-900 hover:bg-slate-700 dark:hover:bg-slate-200 px-3.5 py-2 text-sm font-medium rounded-md transition-colors"
-            >
-              Save
-            </button>
+            {canEdit && (
+              <button
+                onClick={handleSave}
+                className="bg-slate-900 dark:bg-slate-50 text-white dark:text-slate-900 hover:bg-slate-700 dark:hover:bg-slate-200 px-3.5 py-2 text-sm font-medium rounded-md transition-colors"
+              >
+                Save
+              </button>
+            )}
           </div>
         </div>
       </div>
     </div>
+    <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
+    </>
   );
 }

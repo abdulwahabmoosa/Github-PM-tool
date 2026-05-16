@@ -13,6 +13,10 @@ import meRoutes from './routes/me.routes.js';
 import reposRoutes from './routes/repos.routes.js';
 import tasksRoutes from './routes/tasks.routes.js';
 import githubDataRoutes from './routes/github-data.routes.js';
+import insightsRoutes from './routes/insights.routes.js';
+import rulesRoutes from './routes/rules.routes.js';
+import notificationsRoutes from './routes/notifications.routes.js';
+import { ensureRuleConfig } from './lib/ruleConfig.js';
 
 // BigInt can't be serialized by JSON.stringify by default
 BigInt.prototype.toJSON = function () { return this.toString(); };
@@ -59,9 +63,42 @@ app.use('/api', meRoutes);
 app.use('/api', reposRoutes);
 app.use('/api', tasksRoutes);
 app.use('/api', githubDataRoutes);
+app.use('/api', insightsRoutes);
+app.use('/api', rulesRoutes);
+app.use('/api', notificationsRoutes);
+
+async function backfillRuleConfigs() {
+  const repos = await prisma.repo.findMany({ select: { id: true } });
+  for (const repo of repos) {
+    await ensureRuleConfig(repo.id);
+  }
+  console.log(`[startup] Backfilled rule configs for ${repos.length} repo(s)`);
+}
+
+async function backfillOwnerRoles() {
+  const repos = await prisma.repo.findMany({
+    select: { id: true, connectedByUserId: true },
+  });
+  let updated = 0;
+  for (const repo of repos) {
+    const access = await prisma.repoAccess.findFirst({
+      where: { repoId: repo.id, userId: repo.connectedByUserId },
+    });
+    if (access && access.role !== 'ADMIN') {
+      await prisma.repoAccess.update({
+        where: { id: access.id },
+        data: { role: 'ADMIN' },
+      });
+      updated++;
+    }
+  }
+  if (updated > 0) console.log(`[startup] Backfilled ${updated} owner role(s) to ADMIN`);
+}
 
 app.listen(PORT, () => {
   console.log(`TaskMaster API listening on http://localhost:${PORT}`);
+  backfillRuleConfigs().catch(console.error);
+  backfillOwnerRoles().catch(console.error);
   startPoller();
   startRuleEngine();
 });

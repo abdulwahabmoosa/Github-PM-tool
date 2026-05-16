@@ -1,6 +1,10 @@
 import prisma from '../db/prisma.js';
 import { recordStatusChange, recordSkip } from './recordStatusChange.js';
 import { resolveActorLogin } from './resolveActorLogin.js';
+import { hasRecentOverride, overrideRemainingMs } from './overrideWindow.js';
+import { isRuleEnabled } from './ruleConfig.js';
+import { notifyUserByLogin, notifyRepoMembers, notifyTagger } from './notifications.js';
+import { isCurrentMember } from './syncMembers.js';
 
 export async function processUnprocessedEvents() {
   const events = await prisma.githubEvent.findMany({
@@ -52,8 +56,36 @@ export async function processEvent(event) {
     email: payload?.actorEmail ?? null,
   };
   const actorLogin = await resolveActorLogin(tagger);
+  const actorUser = actorLogin
+    ? await prisma.user.findFirst({ where: { githubLogin: actorLogin }, select: { id: true } })
+    : null;
+  const actorUserId = actorUser?.id ?? null;
 
-  const ctx = { task, verb, actorLogin, triggerRef: externalId };
+  // Membership guard: silently skip tags from users no longer in this repo
+  if (actorLogin) {
+    const isMember = await isCurrentMember(repoId, actorLogin);
+    if (!isMember) {
+      return await skipped(task, verb, externalId, actorLogin,
+        `actor ${actorLogin} is not a current repo member`, null);
+    }
+  }
+
+  // Manual override guard: block automated transitions for 5 minutes after
+  // the user manually sets a status, so their intent isn't immediately clobbered.
+  if (hasRecentOverride(task)) {
+    const remainingMin = Math.ceil(overrideRemainingMs(task) / 60000);
+    return await skipped(task, verb, externalId, actorLogin,
+      `manual override in effect (resumes in ${remainingMin}m)`, 'tag_skipped_override');
+  }
+
+  // Rule config guard: check if this verb's rule is enabled for the repo.
+  const ruleEnabled = await isRuleEnabled(repoId, verb);
+  if (!ruleEnabled) {
+    return await skipped(task, verb, externalId, actorLogin,
+      `${verb} rule disabled for this repo`, null);
+  }
+
+  const ctx = { task, verb, actorLogin, actorUserId, triggerRef: externalId };
 
   switch (verb) {
     case 'claim':   return applyClaim(ctx);
@@ -69,7 +101,7 @@ export async function processEvent(event) {
 // RULES
 // ============================================================================
 
-async function applyClaim({ task, actorLogin, triggerRef }) {
+async function applyClaim({ task, actorLogin, actorUserId, triggerRef }) {
   if (task.status !== 'OPEN') {
     return skipped(task, 'claim', triggerRef, actorLogin,
       `task already ${task.status}, claim only valid from OPEN`);
@@ -77,6 +109,22 @@ async function applyClaim({ task, actorLogin, triggerRef }) {
   if (!actorLogin) {
     return skipped(task, 'claim', triggerRef, actorLogin,
       'cannot claim without actor identity');
+  }
+  if (task.assignee && task.assignee.toLowerCase() !== actorLogin.toLowerCase()) {
+    await notifyUserByLogin(task.assignee, actorUserId, {
+      type: 'task_claim_attempted',
+      title: `${actorLogin} tried to claim your task #${task.repoTaskNumber}`,
+      body: `Task: ${task.title}`,
+      linkTo: '/dashboard',
+      metadata: {
+        taskId: task.id,
+        taskNumber: task.repoTaskNumber,
+        attemptedBy: actorLogin,
+        repoId: task.repoId,
+      },
+    });
+    return skipped(task, 'claim', triggerRef, actorLogin,
+      `claim rejected: task already assigned to ${task.assignee}`);
   }
 
   await recordStatusChange({
@@ -97,7 +145,7 @@ async function applyClaim({ task, actorLogin, triggerRef }) {
   return { action: 'transitioned' };
 }
 
-async function applyHelp({ task, actorLogin, triggerRef }) {
+async function applyHelp({ task, actorLogin, actorUserId, triggerRef }) {
   if (task.status !== 'IN_PROGRESS') {
     return skipped(task, 'help', triggerRef, actorLogin,
       `help only valid from IN_PROGRESS, task is ${task.status}`);
@@ -117,10 +165,17 @@ async function applyHelp({ task, actorLogin, triggerRef }) {
     actorLogin,
     automated: true,
   });
+  await notifyRepoMembers(task.repoId, 'ADMIN', actorUserId, {
+    type: 'task_help_requested',
+    title: `Task #${task.repoTaskNumber} needs help: ${task.title}`,
+    body: `${actorLogin} requested help`,
+    linkTo: '/dashboard',
+    metadata: { taskId: task.id, repoId: task.repoId },
+  });
   return { action: 'transitioned' };
 }
 
-async function applyHelping({ task, actorLogin, triggerRef }) {
+async function applyHelping({ task, actorLogin, actorUserId, triggerRef }) {
   if (task.status !== 'HELP_NEEDED') {
     return skipped(task, 'helping', triggerRef, actorLogin,
       `helping only valid from HELP_NEEDED, task is ${task.status}`);
@@ -134,6 +189,7 @@ async function applyHelping({ task, actorLogin, triggerRef }) {
       'assignee cannot help their own task');
   }
 
+  const originalAssignee = task.assignee;
   await recordStatusChange({
     taskId: task.id,
     fromStatus: 'HELP_NEEDED',
@@ -145,6 +201,15 @@ async function applyHelping({ task, actorLogin, triggerRef }) {
     automated: true,
     additionalTaskUpdates: { helper: actorLogin },
   });
+  if (originalAssignee) {
+    await notifyUserByLogin(originalAssignee, actorUserId, {
+      type: 'task_helping_offered',
+      title: `${actorLogin} offered help on task #${task.repoTaskNumber}`,
+      body: task.title,
+      linkTo: '/dashboard',
+      metadata: { taskId: task.id, helperLogin: actorLogin },
+    });
+  }
   return { action: 'transitioned' };
 }
 
@@ -202,7 +267,7 @@ function matchesAssignee(actorLogin, assignee) {
   return actorLogin.toLowerCase() === assignee.toLowerCase();
 }
 
-async function skipped(task, verb, triggerRef, actorLogin, reason) {
+async function skipped(task, verb, triggerRef, actorLogin, reason, notificationType = 'tag_rejected') {
   await recordSkip({
     taskId: task.id,
     currentStatus: task.status,
@@ -212,5 +277,17 @@ async function skipped(task, verb, triggerRef, actorLogin, reason) {
     actorLogin,
     reason,
   });
+  if (notificationType && actorLogin) {
+    const title = notificationType === 'tag_skipped_override'
+      ? `Tag ${triggerRef} skipped: manual override active`
+      : `Tag rejected: ${triggerRef}`;
+    await notifyTagger(actorLogin, {
+      type: notificationType,
+      title,
+      body: reason,
+      linkTo: '/dashboard',
+      metadata: { taskId: task.id, tagName: triggerRef, reason },
+    });
+  }
   return { action: 'skipped', reason };
 }

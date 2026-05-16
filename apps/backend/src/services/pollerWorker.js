@@ -1,5 +1,6 @@
 import prisma from '../db/prisma.js';
 import { pollRepo } from '../lib/githubPoller.js';
+import { syncRepoMembers } from '../lib/syncMembers.js';
 
 const POLL_INTERVAL_MS = 30 * 1000;
 let isPolling = false;
@@ -25,6 +26,12 @@ async function pollAllRepos() {
         }
       } catch (err) {
         console.error(`[poller] ${repo.fullName} unexpected throw:`, err);
+      }
+
+      try {
+        await syncRepoMembers(repo.id);
+      } catch (err) {
+        console.error(`[poller] sync failed for repo ${repo.id}:`, err.message);
       }
     }
   } finally {

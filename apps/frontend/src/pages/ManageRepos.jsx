@@ -1,5 +1,6 @@
 import ConnectedRepos from '../components/ConnectedRepos.jsx';
 import RepoBrowser from '../components/RepoBrowser.jsx';
+import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
 export default function ManageRepos({
   connectedRepos, connectedLoading,
@@ -8,6 +9,7 @@ export default function ManageRepos({
   onConnect, onDisconnect, onRefreshGithub,
   onBack,
 }) {
+  useDocumentTitle('Manage repos');
   return (
     <div className="max-w-3xl mx-auto px-5 py-6">
       <button

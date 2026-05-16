@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import PublicNav from '../components/PublicNav.jsx';
 import StateMachineDiagram from '../components/docs/StateMachineDiagram.jsx';
+import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
 /* ── Sidebar nav structure ─────────────────────────────────────────────── */
 
@@ -133,6 +134,7 @@ function FaqItem({ q, children }) {
 /* ── Docs page ──────────────────────────────────────────────────────────── */
 
 export default function Docs() {
+  useDocumentTitle('Docs');
   const [activeId, setActiveId] = useState('what-is-taskmaster');
 
   useEffect(() => {
@@ -270,7 +272,7 @@ export default function Docs() {
             <Table
               headers={['Verb', 'What it does', 'Who can push it']}
               rows={[
-                [<C>claim</C>,   'Take an unassigned task',     'Anyone, only from OPEN'],
+                [<C>claim</C>,   'Claim an unassigned task, OR start work on a task already assigned to you. The task transitions from OPEN to IN_PROGRESS. If the task is assigned to someone else, the claim is rejected.',     'Anyone for unassigned tasks; assignee only for pre-assigned tasks'],
                 [<C>help</C>,    'Request help on a task',      'Only the assignee'],
                 [<C>helping</C>, 'Offer help on a task',        'Anyone NOT the assignee'],
                 [<C>review</C>,  'Mark ready for review',       'Only the assignee'],
@@ -467,8 +469,11 @@ export default function Docs() {
             </FaqItem>
 
             <FaqItem q="What's the difference between claim and helping?">
-              <C>claim</C> transitions an OPEN task to IN_PROGRESS and assigns it. It
-              fails if the task is already claimed. <C>helping</C> is for when an
+              <C>claim</C> transitions an OPEN task to IN_PROGRESS. Anyone can claim an
+              unassigned task; if the task is already assigned to you, claiming it still
+              succeeds and starts your work. If the task is assigned to someone else, the
+              claim is rejected — and both you AND the rightful assignee are notified so
+              the conflict is visible to both sides. <C>helping</C> is for when an
               already-claimed task needs help — the helper takes over the active work.
             </FaqItem>
 

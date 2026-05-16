@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import PublicNav from '../components/PublicNav.jsx';
+import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
 const VERBS = ['claim', 'help', 'helping', 'review', 'done'];
 
@@ -24,6 +25,8 @@ function TerminalLine({ prompt, command, args, output }) {
 }
 
 export default function Landing() {
+  useDocumentTitle(null);
+
   function handleLogin() {
     window.location.href = 'http://localhost:4000/auth/github';
   }

@@ -9,7 +9,7 @@ function relTime(iso) {
   return `${Math.floor(s / 3600)}h ago`;
 }
 
-export default function RepoToolbar({ repo, onPollNow, onNewTask, polling, tick }) {
+export default function RepoToolbar({ repo, onPollNow, onNewTask, polling, tick, canCreateTask = true }) {
   void tick;
   const syncState = repo.syncState;
 
@@ -38,12 +38,14 @@ export default function RepoToolbar({ repo, onPollNow, onNewTask, polling, tick 
         >
           Settings
         </Link>
-        <button
-          onClick={onNewTask}
-          className="bg-slate-900 dark:bg-slate-50 text-white dark:text-slate-900 hover:bg-slate-700 dark:hover:bg-slate-200 px-3.5 py-2 text-sm font-medium rounded-md transition-colors"
-        >
-          + New task
-        </button>
+        {canCreateTask && (
+          <button
+            onClick={onNewTask}
+            className="bg-slate-900 dark:bg-slate-50 text-white dark:text-slate-900 hover:bg-slate-700 dark:hover:bg-slate-200 px-3.5 py-2 text-sm font-medium rounded-md transition-colors"
+          >
+            + New task
+          </button>
+        )}
       </div>
     </div>
   );

@@ -6,6 +6,8 @@ import { useTasks } from '../hooks/useTasks.js';
 import { useProjectStats } from '../hooks/useProjectStats.js';
 import { useToast } from '../hooks/useToast.js';
 import { useRules } from '../hooks/useRules.js';
+import { useRepoPermissions } from '../hooks/useRepoPermissions.js';
+import { useDocumentTitle } from '../hooks/useDocumentTitle.js';
 
 import DashboardHeader from '../components/dashboard/DashboardHeader.jsx';
 import RepoSelector from '../components/dashboard/RepoSelector.jsx';
@@ -13,6 +15,8 @@ import RepoToolbar from '../components/dashboard/RepoToolbar.jsx';
 import ProjectOverview from '../components/dashboard/ProjectOverview.jsx';
 import YourTasksSection from '../components/dashboard/YourTasksSection.jsx';
 import TeamTasksSection from '../components/dashboard/TeamTasksSection.jsx';
+import HelpNeededSection from '../components/dashboard/HelpNeededSection.jsx';
+import UnclaimedCallout from '../components/dashboard/UnclaimedCallout.jsx';
 
 import TaskFormModal from '../components/TaskFormModal.jsx';
 import TaskDetailModal from '../components/TaskDetailModal.jsx';
@@ -46,10 +50,13 @@ export default function Dashboard({ user, onLogout }) {
   const [githubLoading, setGithubLoading] = useState(false);
   const [githubError, setGithubError] = useState(null);
 
+  const selectedRepo = connectedRepos.find((r) => r.id === selectedRepoId);
+
   const tasksHook = useTasks(selectedRepoId);
   const statsHook = useProjectStats(selectedRepoId);
   const { rules } = useRules(selectedRepoId);
   const enabledCount = rules.filter((r) => r.enabled).length;
+  const permissions = useRepoPermissions(selectedRepo, selectedRepo?.myAccess, user);
 
   // Re-render tick every 5s for relative time displays
   useEffect(() => {
@@ -159,14 +166,21 @@ export default function Dashboard({ user, onLogout }) {
     }
   }
 
-  const selectedRepo = connectedRepos.find((r) => r.id === selectedRepoId);
+  useDocumentTitle('Dashboard');
+
   const currentUserLogin = user.githubLogin;
   const yourTasks = tasksHook.tasks.filter(
     (t) => t.assignee && t.assignee.toLowerCase() === currentUserLogin.toLowerCase()
   );
-  const teamTasks = tasksHook.tasks.filter(
-    (t) => !t.assignee || t.assignee.toLowerCase() !== currentUserLogin.toLowerCase()
+  const helpNeededTasks = tasksHook.tasks.filter(
+    (t) => t.status === 'HELP_NEEDED'
   );
+  const teamTasksAll = tasksHook.tasks.filter(
+    (t) =>
+      t.status !== 'HELP_NEEDED' &&
+      (!t.assignee || t.assignee.toLowerCase() !== currentUserLogin.toLowerCase())
+  );
+  const unclaimedCount = teamTasksAll.filter((t) => !t.assignee).length;
 
   const authFailed = selectedRepo?.syncState?.lastPollStatus === 'AUTH_FAILED';
   const tasksInitialLoading = tasksHook.loading && tasksHook.tasks.length === 0;
@@ -249,6 +263,7 @@ export default function Dashboard({ user, onLogout }) {
             onNewTask={() => setNewTaskOpen(true)}
             polling={polling}
             tick={tick}
+            canCreateTask={permissions.canCreateTask}
           />
 
           <ProjectOverview stats={statsHook.stats} />
@@ -257,7 +272,7 @@ export default function Dashboard({ user, onLogout }) {
             {rules.length > 0 ? (
               <span className="text-xs text-slate-500 dark:text-slate-400">
                 {enabledCount} of {rules.length} rules active
-                {enabledCount < rules.length && (
+                {permissions.canConfigureRules && enabledCount < rules.length && (
                   <Link
                     to={`/repos/${selectedRepoId}/settings`}
                     className="ml-1.5 text-indigo-600 dark:text-indigo-400 hover:underline"
@@ -281,17 +296,39 @@ export default function Dashboard({ user, onLogout }) {
             <div className="space-y-2 mb-8">
               {[...Array(4)].map((_, i) => <TaskCardSkeleton key={i} />)}
             </div>
+          ) : tasksHook.tasks.length === 0 ? (
+            <div className="py-16 text-center">
+              <div className="text-4xl mb-3 opacity-30">✦</div>
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                No tasks yet
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                Create your first task or push a tag like task-1-claim to get started.
+              </p>
+              {permissions.canCreateTask && (
+                <button
+                  onClick={() => setNewTaskOpen(true)}
+                  className="bg-slate-900 dark:bg-slate-50 text-white dark:text-slate-900 px-3.5 py-2 text-sm font-medium rounded-md hover:bg-slate-700 dark:hover:bg-slate-200 transition-colors"
+                >
+                  + Create your first task
+                </button>
+              )}
+            </div>
           ) : (
             <>
+              <UnclaimedCallout count={unclaimedCount} />
               <YourTasksSection
                 tasks={yourTasks}
                 onTaskClick={(task) => setTaskDetailModal({ open: true, task })}
                 currentUserLogin={currentUserLogin}
               />
-              <TeamTasksSection
-                tasks={teamTasks}
+              <HelpNeededSection
+                tasks={helpNeededTasks}
                 onTaskClick={(task) => setTaskDetailModal({ open: true, task })}
-                currentUserLogin={currentUserLogin}
+              />
+              <TeamTasksSection
+                tasks={teamTasksAll}
+                onTaskClick={(task) => setTaskDetailModal({ open: true, task })}
               />
             </>
           )}
@@ -315,6 +352,7 @@ export default function Dashboard({ user, onLogout }) {
         onDelete={handleDeleteTask}
         onStatusChange={handleStatusChange}
         repoId={selectedRepoId}
+        permissions={permissions}
       />
 
       <Toast message={toast.message} variant={toast.variant} onClose={hideToast} />

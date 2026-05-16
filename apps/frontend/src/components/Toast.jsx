@@ -19,7 +19,7 @@ export default function Toast({ message, variant = 'info', onClose }) {
   if (!message) return null;
 
   return (
-    <div className="fixed bottom-5 right-5 z-[60] max-w-sm w-full pointer-events-none">
+    <div className="fixed bottom-5 right-5 z-[60] max-w-sm w-full pointer-events-none animate-fade-in">
       <div
         className={`pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-lg border shadow-lg ${VARIANT[variant] ?? VARIANT.info}`}
         role="alert"

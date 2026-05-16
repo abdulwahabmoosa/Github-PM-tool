@@ -1,4 +1,9 @@
+import { useState } from 'react';
+import ConfirmDialog from './ConfirmDialog.jsx';
+
 export default function ConnectedRepos({ repos, onDisconnect, loading }) {
+  const [confirmState, setConfirmState] = useState(null);
+
   function roleBadge(role) {
     const cls = role === 'owner'
       ? 'bg-indigo-600 text-white'
@@ -10,17 +15,17 @@ export default function ConnectedRepos({ repos, onDisconnect, loading }) {
     );
   }
 
-  function disconnectMessage(repo) {
-    if (repo.role === 'member') {
-      return `Remove your access to ${repo.fullName}? Other team members keep access.`;
-    }
-    return `Disconnect ${repo.fullName}?\n\nIf you're the only member, the repo and all tasks will be deleted.\nIf other members exist, ownership transfers to the oldest member.`;
-  }
-
   function handleDisconnect(repo) {
-    if (window.confirm(disconnectMessage(repo))) {
-      onDisconnect(repo.id);
-    }
+    const isOwner = repo.role === 'owner';
+    setConfirmState({
+      title: isOwner ? `Disconnect ${repo.fullName}?` : `Leave ${repo.fullName}?`,
+      body: isOwner
+        ? "If you're the only member, the repo and all tasks will be deleted. If other members exist, ownership transfers to the oldest member."
+        : 'Other team members keep access.',
+      confirmLabel: isOwner ? 'Disconnect' : 'Leave',
+      confirmVariant: 'danger',
+      onConfirm: () => onDisconnect(repo.id),
+    });
   }
 
   return (
@@ -61,6 +66,8 @@ export default function ConnectedRepos({ repos, onDisconnect, loading }) {
           </div>
         ))}
       </div>
+
+      <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
     </section>
   );
 }
