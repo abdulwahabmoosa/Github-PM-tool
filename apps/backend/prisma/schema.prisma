@@ -1,0 +1,187 @@
+generator client {
+  provider = "prisma-client-js"
+   binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TaskStatus {
+  OPEN
+  TO_DO
+  IN_PROGRESS
+  HELP_NEEDED
+  IN_REVIEW
+  DONE
+}
+
+model User {
+  id             String         @id @default(cuid())
+  githubId       BigInt         @unique
+  githubLogin    String         @unique
+  email          String?
+  avatarUrl      String?
+  accessTokenEnc String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  connectedRepos Repo[]
+  tasks          Task[]
+  repoAccesses   RepoAccess[]
+  notifications  Notification[]
+
+  @@map("users")
+}
+
+model Repo {
+  id                String        @id @default(cuid())
+  connectedByUserId String
+  githubRepoId      BigInt        @unique
+  owner             String
+  name              String
+  fullName          String
+  private           Boolean
+  defaultBranch     String
+  mode              String        @default("OPEN")
+  connectedAt       DateTime      @default(now())
+  connectedBy       User          @relation(fields: [connectedByUserId], references: [id], onDelete: Cascade)
+  tasks             Task[]
+  syncState         SyncState?
+  events            GithubEvent[]
+  accesses          RepoAccess[]
+  ruleConfigs       RuleConfig[]
+
+  @@map("repos")
+  @@index([connectedByUserId])
+}
+
+model Task {
+  id                   String     @id @default(cuid())
+  userId               String
+  repoId               String
+  title                String
+  description          String?
+  branch               String?
+  linkedIssueNumber    Int?
+  assignee             String?
+  status               TaskStatus @default(OPEN)
+  needsHelp            Boolean    @default(false)
+  repoTaskNumber       Int
+  helper               String?
+  claimBranch          String?
+  claimedAt            DateTime?
+  lastManualOverrideAt DateTime?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  user                 User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repo                 Repo            @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  histories            StatusHistory[]
+
+  @@unique([repoId, repoTaskNumber])
+  @@index([repoId, status])
+  @@index([assignee])
+  @@map("tasks")
+}
+
+model StatusHistory {
+  id          String   @id @default(cuid())
+  taskId      String
+  fromStatus  String?
+  toStatus    String
+  triggerType String
+  triggerVerb String?
+  triggerRef  String?
+  actorLogin  String?
+  automated   Boolean
+  note        String?
+  createdAt   DateTime @default(now())
+
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt(sort: Desc)])
+  @@map("status_history")
+}
+
+model SyncState {
+  id                String   @id @default(cuid())
+  repoId            String   @unique
+  lastCommitShaSeen String?
+  lastTagShaSeen    String?
+  lastPolledAt      DateTime?
+  lastPollStatus    String?
+  lastPollError     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  repo              Repo     @relation(fields: [repoId], references: [id], onDelete: Cascade)
+
+  @@map("sync_state")
+}
+
+model GithubEvent {
+  id          String    @id @default(cuid())
+  repoId      String
+  eventType   String
+  externalId  String
+  branch      String?
+  actorLogin  String?
+  payload     Json
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  repo        Repo      @relation(fields: [repoId], references: [id], onDelete: Cascade)
+
+  @@unique([repoId, eventType, externalId])
+  @@index([processedAt])
+  @@index([repoId, createdAt(sort: Desc)])
+  @@map("github_events")
+}
+
+model RuleConfig {
+  id        String   @id @default(cuid())
+  repoId    String
+  repo      Repo     @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  ruleType  String
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([repoId, ruleType])
+  @@index([repoId])
+  @@map("rule_config")
+}
+
+model RepoAccess {
+  id        String   @id @default(cuid())
+  userId    String
+  repoId    String
+  role      String   @default("MEMBER")
+  grantedAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repo      Repo     @relation(fields: [repoId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, repoId])
+  @@index([userId])
+  @@index([repoId])
+  @@map("repo_access")
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String?
+  linkTo    String?
+  metadata  Json      @default("{}")
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, readAt])
+  @@map("notifications")
+}

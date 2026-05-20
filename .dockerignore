@@ -1,0 +1,44 @@
+# Node
+**/node_modules
+**/dist
+**/build
+**/.vite
+
+# Git
+.git
+.gitignore
+
+
+
+
+# Env files (secrets must not be in the image — Cloud Run provides them as env vars)
+**/.env
+**/.env.local
+**/.env.development
+**/.env.production
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode
+.idea
+*.swp
+
+# Docs
+*.md
+LICENSE
+
+# Tests
+**/coverage
+**/tests
+**/__tests__
+
+# Local-only files
+backup_before_tests.sql
